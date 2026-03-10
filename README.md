@@ -192,6 +192,8 @@ pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.
 
 > `[local-embedding]` installs a local embedding model (~900MB download on first use). If you already have an embedding service (OpenAI, SiliconFlow, Ollama), skip this and use `trust-mem-lite` instead — see [Embedding providers](#embedding-providers).
 
+**⚠️ Before step 3**: If you plan to use a custom embedding provider, configure it now (see [Embedding providers](#embedding-providers)). Once your AI tool starts, the database schema is locked to that embedding dimension.
+
 ### 3. Configure your AI tool
 
 ```bash
@@ -286,7 +288,13 @@ TrustMem needs an embedding model to vectorize memories for semantic search.
 
 **Recommendation**: If you already have an embedding service (OpenAI, Ollama, SiliconFlow), use it — avoids the local model download and cold-start latency. Otherwise, local works well; the download only happens once.
 
-**Configure embedding before your AI tool starts for the first time** — the MCP server creates tables using the configured dimension, so there's no mismatch.
+**⚠️ CRITICAL: Configure embedding BEFORE your AI tool starts for the first time.**
+
+The MCP server creates database tables with the configured embedding dimension on first startup. Once memories are stored, changing the embedding provider requires:
+1. Running `trustmem migrate --dim <new_dim> --force` to ALTER the column (destructive)
+2. Re-embedding all existing memories via `trustmem governance`
+
+Choose your embedding provider carefully at setup time to avoid this migration overhead.
 
 ```bash
 # Local (default) — no extra flags needed
@@ -543,9 +551,9 @@ If you're an AI agent helping a user set up TrustMem, **ask before acting**:
 
 1. **Which AI tool?** Kiro / Cursor / Claude Code?
 2. **MatrixOne database?** Already have one → get URL. Local Docker → `docker compose up -d`. [MatrixOne Cloud](https://cloud.matrixorigin.cn) → no Docker needed.
-3. **Embedding?** Already have a service? Use it. Otherwise local is fine.
+3. **Embedding?** ⚠️ **CRITICAL: Ask this BEFORE installation.** Once the MCP server starts, the embedding dimension is locked into the database schema. Changing it later requires `migrate --force` (clears embeddings) + re-embedding all memories. Already have a service (OpenAI/SiliconFlow/Ollama)? Use it. Otherwise local is fine.
 4. **Install**: `pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'trust-mem-lite[local-embedding]'`
-5. **Configure**: `cd <user-project> && trustmem init`
+5. **Configure**: `cd <user-project> && trustmem init` (with embedding flags if applicable)
 6. **Verify**: `trustmem status`
 7. Tell user to **restart their AI tool**
 

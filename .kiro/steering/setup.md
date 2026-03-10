@@ -24,6 +24,8 @@ Based on the answer:
 
 ### Question 3: Embedding provider
 
+**⚠️ CRITICAL: This decision is hard to reverse. Once the MCP server starts and creates tables, changing embedding provider requires data migration and re-embedding all memories.**
+
 Ask: "For memory search quality, TrustMem needs an embedding model. Do you already have an OpenAI-compatible embedding endpoint? (OpenAI, SiliconFlow, Ollama, or any custom service)
 - **Yes** → use it directly. No download, no cold-start. Best choice.
 - **No** → use local model. ⚠️ downloads ~900MB (torch + sentence-transformers) on first install. Avoid on slow/proxied networks."
@@ -37,6 +39,8 @@ Ask: "For memory search quality, TrustMem needs an embedding model. Do you alrea
 These values get written into the `env` block of `mcp.json` automatically — no manual editing needed.
 
 **If user chooses local embedding, explicitly warn**: "This will download ~900MB. If you're on a slow or proxied network, consider using an OpenAI-compatible service instead. Proceed?"
+
+**After collecting embedding config, remind user**: "Once your AI tool starts, the database tables will be created with this embedding dimension. Changing it later requires running `trustmem migrate --force` (which clears existing embeddings) and re-embedding all memories via `trustmem governance`. Make sure this configuration is correct before proceeding."
 
 ## Execution Rules
 
