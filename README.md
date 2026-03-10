@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.jpg" alt="TrustMem Logo" width="180"/>
+  <img src="assets/logo.jpg" alt="TrustMem Logo" width="300"/>
   
   # TrustMem
   
