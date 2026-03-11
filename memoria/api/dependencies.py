@@ -29,7 +29,9 @@ def get_current_user_id(
         return "__admin__"
 
     key_hash = ApiKey.hash_key(token)
-    row = db.query(ApiKey.key_id, ApiKey.user_id, ApiKey.expires_at).filter_by(key_hash=key_hash, is_active=1).first()
+    row = db.query(ApiKey.key_id, ApiKey.user_id, ApiKey.expires_at).filter(
+        ApiKey.key_hash == key_hash, ApiKey.is_active > 0,
+    ).first()
     if row is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 

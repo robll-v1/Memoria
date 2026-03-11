@@ -65,6 +65,9 @@ class ObserveRequest(BaseModel):
     source_event_ids: list[str] | None = None
 
 
+_CURSOR_FMT = "%Y-%m-%d %H:%M:%S.%f"
+
+
 # ── Helpers ───────────────────────────────────────────────────────────
 
 def _to_response(mem: Any) -> dict[str, Any]:
@@ -125,22 +128,25 @@ def list_memories(
         if cursor:
             parts = cursor.split("|", 1)
             if len(parts) == 2:
+                try:
+                    cursor_ts = datetime.strptime(parts[0], _CURSOR_FMT)
+                except ValueError:
+                    raise HTTPException(status_code=422, detail="Invalid cursor format")
                 q = q.filter(or_(
-                    M.observed_at < parts[0],
-                    and_(M.observed_at == parts[0], M.memory_id < parts[1]),
+                    M.observed_at < cursor_ts,
+                    and_(M.observed_at == cursor_ts, M.memory_id < parts[1]),
                 ))
         rows = q.order_by(M.observed_at.desc(), M.memory_id.desc()).limit(limit).all()
-        _FMT = "%Y-%m-%d %H:%M:%S.%f"
         items = [
             {"memory_id": r.memory_id, "content": r.content, "memory_type": r.memory_type,
              "confidence": r.initial_confidence,
-             "observed_at": r.observed_at.strftime(_FMT) if r.observed_at else None}
+             "observed_at": r.observed_at.strftime(_CURSOR_FMT) if r.observed_at else None}
             for r in rows
         ]
         next_cursor = None
         if len(rows) == limit and rows:
             last = rows[-1]
-            ts = last.observed_at.strftime(_FMT) if last.observed_at else ""
+            ts = last.observed_at.strftime(_CURSOR_FMT) if last.observed_at else ""
             next_cursor = f"{ts}|{last.memory_id}"
         return {"items": items, "next_cursor": next_cursor}
     finally:

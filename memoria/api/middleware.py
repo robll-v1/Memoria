@@ -14,7 +14,7 @@ Override any limit via environment variables:
 
 import os
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -55,20 +55,24 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
 
 
 class _SlidingWindow:
-    __slots__ = ("timestamps",)
+    __slots__ = ("timestamps", "_max")
 
-    def __init__(self):
-        self.timestamps: list[float] = []
+    def __init__(self, max_size: int = 2000):
+        self.timestamps: deque[float] = deque(maxlen=max_size)
 
     def hit(self, now: float, window: int) -> int:
         cutoff = now - window
-        self.timestamps = [t for t in self.timestamps if t > cutoff]
+        # Pop expired entries from the left (oldest first)
+        while self.timestamps and self.timestamps[0] <= cutoff:
+            self.timestamps.popleft()
         self.timestamps.append(now)
         return len(self.timestamps)
 
 
 # key → (method:path_prefix) → SlidingWindow
 _windows: dict[str, dict[str, _SlidingWindow]] = defaultdict(lambda: defaultdict(_SlidingWindow))
+_last_cleanup = time.time()
+_CLEANUP_INTERVAL = 300  # purge stale keys every 5 minutes
 
 
 def _match_limit(method: str, path: str) -> tuple[int, int]:
@@ -89,6 +93,18 @@ def _match_limit(method: str, path: str) -> tuple[int, int]:
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        global _last_cleanup
+
+        # Periodic cleanup of stale key entries
+        now = time.time()
+        if now - _last_cleanup > _CLEANUP_INTERVAL:
+            _last_cleanup = now
+            stale = [k for k, routes in _windows.items() if all(
+                not w.timestamps for w in routes.values()
+            )]
+            for k in stale:
+                del _windows[k]
+
         # Extract API key from Authorization header
         auth = request.headers.get("authorization", "")
         if not auth.startswith("Bearer "):

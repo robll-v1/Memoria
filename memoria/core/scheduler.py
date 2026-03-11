@@ -179,7 +179,7 @@ class AsyncIOBackend(SchedulerBackend):
 
 class MemoryGovernanceScheduler:
     def __init__(self, backend: SchedulerBackend | None = None):
-        self._enabled = os.environ.get("GOVERNANCE_ENABLED", "true").lower() == "true"
+        self._enabled = os.environ.get("MEMORIA_GOVERNANCE_ENABLED", "true").lower() == "true"
         self._backend = backend
 
     async def start(self) -> None:

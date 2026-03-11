@@ -36,18 +36,22 @@ def get_embedding_client() -> EmbeddingClient:
     if _shared_client is None:
         import logging
 
-        from config.settings import get_settings
+        from memoria.config import get_settings
+        from memoria.core.embedding.client import KNOWN_DIMENSIONS
 
         s = get_settings()
+        dim = s.embedding_dim
+        if dim == 0:
+            dim = KNOWN_DIMENSIONS.get(s.embedding_model, 1024)
         _shared_client = EmbeddingClient(
             provider=s.embedding_provider,
             model=s.embedding_model,
-            dim=s.embedding_dim,
+            dim=dim,
             api_key=s.embedding_api_key,
             base_url=s.embedding_base_url,
         )
         logging.getLogger(__name__).info(
             "EmbeddingClient: provider=%s, model=%s, dim=%d",
-            s.embedding_provider, s.embedding_model, s.embedding_dim,
+            s.embedding_provider, s.embedding_model, dim,
         )
     return _shared_client

@@ -45,11 +45,21 @@ class ApiKey(Base):
     @staticmethod
     def generate_key() -> tuple[str, str, str]:
         raw = "sk-" + secrets.token_urlsafe(32)
-        h = hashlib.sha256(raw.encode()).hexdigest()
+        h = ApiKey._hmac_hash(raw)
         return raw, h, raw[:12]
 
     @staticmethod
     def hash_key(raw: str) -> str:
+        return ApiKey._hmac_hash(raw)
+
+    @staticmethod
+    def _hmac_hash(raw: str) -> str:
+        """HMAC-SHA256 keyed with master key. Falls back to bare SHA-256 if no master key."""
+        import hmac as _hmac
+        from memoria.config import get_settings
+        mk = get_settings().master_key
+        if mk:
+            return _hmac.new(mk.encode(), raw.encode(), hashlib.sha256).hexdigest()
         return hashlib.sha256(raw.encode()).hexdigest()
 
 

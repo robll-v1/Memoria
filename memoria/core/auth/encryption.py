@@ -16,11 +16,11 @@ class TokenEncryption:
         Raises:
             RuntimeError: If TOKEN_ENCRYPTION_KEY is not set in production.
         """
-        key_source = secret_key or os.getenv("TOKEN_ENCRYPTION_KEY")
+        key_source = secret_key or os.getenv("MEMORIA_TOKEN_ENCRYPTION_KEY") or os.getenv("TOKEN_ENCRYPTION_KEY")
         
         if not key_source:
             raise RuntimeError(
-                "TOKEN_ENCRYPTION_KEY environment variable must be set. "
+                "MEMORIA_TOKEN_ENCRYPTION_KEY environment variable must be set. "
                 "Generate a key with: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
             )
         

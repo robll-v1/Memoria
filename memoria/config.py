@@ -17,8 +17,8 @@ class MemoriaSettings(BaseSettings):
     db_password: str = "111"
     db_name: str = "memoria"
 
-    # Embedding
-    embedding_provider: str = "openai"
+    # Embedding — default "mock" for zero-config startup; set to "openai" or "local" in production
+    embedding_provider: str = "mock"
     embedding_model: str = "BAAI/bge-m3"
     embedding_dim: int = Field(default=0, description="0 = auto-infer")
     embedding_api_key: str = ""

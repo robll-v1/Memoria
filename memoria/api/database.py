@@ -17,14 +17,19 @@ def _get_engine():
     if _engine is None:
         settings = get_settings()
         from matrixone import Client as MoClient
+
+        # Validate db_name to prevent SQL injection via config
+        import re
+        if not re.fullmatch(r"[a-zA-Z0-9_]+", settings.db_name):
+            raise ValueError(f"Invalid database name: {settings.db_name!r}")
+
         bootstrap = MoClient(
             host=settings.db_host, port=settings.db_port,
             user=settings.db_user, password=settings.db_password,
             database="mo_catalog", sql_log_mode="off",
         )
-        with bootstrap._engine.connect() as c:
+        with bootstrap._engine.begin() as c:
             c.execute(text(f"CREATE DATABASE IF NOT EXISTS `{settings.db_name}`"))
-            c.execute(text("COMMIT"))
         bootstrap._engine.dispose()
 
         _mo_client = MoClient(
@@ -87,7 +92,7 @@ def init_db():
     ensure_tables(engine, dim=dim)
 
     # Governance infrastructure tables (used by scheduler)
-    with engine.connect() as c:
+    with engine.begin() as c:
         c.execute(text(
             "CREATE TABLE IF NOT EXISTS infra_distributed_locks ("
             "  lock_name VARCHAR(64) PRIMARY KEY,"
@@ -105,4 +110,3 @@ def init_db():
             "  created_at DATETIME(6) NOT NULL DEFAULT NOW()"
             ")"
         ))
-        c.execute(text("COMMIT"))
