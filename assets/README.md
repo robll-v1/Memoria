@@ -1,6 +1,6 @@
-# TrustMem Assets
+# Memoria Assets
 
-This directory contains visual assets for the TrustMem project.
+This directory contains visual assets for the Memoria project.
 
 ## Logo Files
 
@@ -19,12 +19,12 @@ The logo features:
 
 ### In Markdown
 ```markdown
-![TrustMem Logo](assets/logo.jpg)
+![Memoria Logo](assets/logo.jpg)
 ```
 
 ### In HTML (with size control)
 ```html
-<img src="assets/logo.jpg" alt="TrustMem Logo" width="180"/>
+<img src="assets/logo.jpg" alt="Memoria Logo" width="180"/>
 ```
 
 ## Guidelines

@@ -1,6 +1,6 @@
-# TrustMem Setup Guide (for AI Agents)
+# Memoria Setup Guide (for AI Agents)
 
-This document provides step-by-step executable instructions for AI agents to help users install and configure TrustMem. Follow each step in order.
+This document provides step-by-step executable instructions for AI agents to help users install and configure Memoria. Follow each step in order.
 
 ## Step 1: Check Prerequisites
 
@@ -22,7 +22,7 @@ This is the most critical step. MatrixOne is the storage backend for all memorie
 
 ### Option A: Using docker-compose (recommended)
 
-Clone or navigate to the TrustMem repo, then:
+Clone or navigate to the Memoria repo, then:
 
 ```bash
 # Start MatrixOne with data persistence and memory limit
@@ -82,7 +82,7 @@ docker compose ps
 mysql -h 127.0.0.1 -P 6001 -u root -p111 -e "SELECT 1"
 
 # Method 3: Check logs for readiness
-docker logs trustmem-matrixone 2>&1 | tail -20
+docker logs memoria-matrixone 2>&1 | tail -20
 # Look for log lines indicating the service is listening
 ```
 
@@ -91,7 +91,7 @@ docker logs trustmem-matrixone 2>&1 | tail -20
 **Container exits immediately:**
 ```bash
 # Check logs for errors
-docker logs trustmem-matrixone 2>&1 | tail -30
+docker logs memoria-matrixone 2>&1 | tail -30
 
 # Common cause: data directory permissions
 # Fix: ensure the data directory is writable
@@ -107,7 +107,7 @@ lsof -i :6001 || ss -tlnp | grep 6001
 # Either stop the other process, or change the port:
 # In .env: MO_PORT=6002
 # Then: docker compose up -d
-# And use: trustmem init --db-url 'mysql+pymysql://root:111@localhost:6002/trustmem'
+# And use: memoria init --db-url 'mysql+pymysql://root:111@localhost:6002/memoria'
 ```
 
 **Out of memory:**
@@ -159,7 +159,7 @@ newgrp docker
 
 # If Docker is not an option, use MatrixOne Cloud instead:
 # Register at https://cloud.matrixorigin.cn (free tier available)
-# Then: trustmem init --db-url 'mysql+pymysql://user:pass@cloud-host:6001/db'
+# Then: memoria init --db-url 'mysql+pymysql://user:pass@cloud-host:6001/db'
 ```
 
 **Docker Compose not available:**
@@ -172,7 +172,7 @@ docker-compose up -d
 sudo apt-get install docker-compose-plugin
 ```
 
-## Step 3: Install TrustMem
+## Step 3: Install Memoria
 
 First, check if the user is already in a virtual environment:
 ```bash
@@ -187,7 +187,7 @@ python3 -m venv .venv && source .venv/bin/activate
 Then install:
 ```bash
 # Install with local embedding support (recommended)
-pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'trust-mem-lite[local-embedding]'
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'memoria-lite[local-embedding]'
 ```
 
 **Important notes about local embedding:**
@@ -197,18 +197,18 @@ pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.
 
 If user does NOT want local embedding (e.g. wants to use OpenAI instead):
 ```bash
-pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ trust-mem-lite
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ memoria-lite
 ```
 
 ## Step 4: Initialize for the User's AI Tool
 
-Detect which AI tool the user is using, then run `trustmem init` in their project directory.
+Detect which AI tool the user is using, then run `memoria init` in their project directory.
 
 ### For Kiro users:
 ```bash
 cd <project-directory>
 mkdir -p .kiro
-trustmem init
+memoria init
 ```
 This creates:
 - `.kiro/settings/mcp.json` — MCP server config
@@ -218,7 +218,7 @@ This creates:
 ```bash
 cd <project-directory>
 mkdir -p .cursor
-trustmem init
+memoria init
 ```
 This creates:
 - `.cursor/mcp.json` — MCP server config
@@ -227,7 +227,7 @@ This creates:
 ### For Claude Code users:
 ```bash
 cd <project-directory>
-trustmem init
+memoria init
 ```
 This creates:
 - `.claude/mcp.json` — MCP server config
@@ -235,19 +235,19 @@ This creates:
 
 ### Custom database URL:
 ```bash
-trustmem init --db-url 'mysql+pymysql://root:111@localhost:6001/trustmem'
+memoria init --db-url 'mysql+pymysql://root:111@localhost:6001/memoria'
 ```
 
 ### Using OpenAI embeddings instead of local:
 ```bash
-trustmem init --embedding-provider openai --embedding-api-key sk-...
+memoria init --embedding-provider openai --embedding-api-key sk-...
 ```
 
 ## Step 5: Verify Setup
 
 ```bash
 # Check configuration status
-trustmem status
+memoria status
 
 # Test that MCP server can start
 python -m mo_memory_mcp
@@ -273,22 +273,22 @@ docker compose up -d
 docker start matrixone
 
 # Wait 30s for it to be ready, then retry
-trustmem init
+memoria init
 ```
 
 ### "sentence-transformers not installed"
 ```bash
-pip install 'trust-mem-lite[local-embedding]'
+pip install 'memoria-lite[local-embedding]'
 ```
 
 ### AI tool doesn't use memory after setup
-1. Run `trustmem status` to verify config files exist
-2. Make sure the AI tool was restarted after `trustmem init`
+1. Run `memoria status` to verify config files exist
+2. Make sure the AI tool was restarted after `memoria init`
 3. Check MCP server starts: `python -m mo_memory_mcp`
 
-### Update rules after upgrading TrustMem
+### Update rules after upgrading Memoria
 ```bash
-pip install --upgrade trust-mem-lite
-trustmem update-rules
+pip install --upgrade memoria-lite
+memoria update-rules
 # Restart AI tool
 ```

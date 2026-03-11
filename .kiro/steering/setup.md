@@ -2,9 +2,9 @@
 inclusion: always
 ---
 
-# TrustMem Local Setup
+# Memoria Local Setup
 
-When the user wants to set up TrustMem, **do NOT jump straight into installation**. First ask key questions to determine the right path.
+When the user wants to set up Memoria, **do NOT jump straight into installation**. First ask key questions to determine the right path.
 
 ## Decision Flow
 
@@ -26,7 +26,7 @@ Based on the answer:
 
 **⚠️ CRITICAL: This decision is hard to reverse. Once the MCP server starts and creates tables, changing embedding provider requires data migration and re-embedding all memories.**
 
-Ask: "For memory search quality, TrustMem needs an embedding model. Do you already have an OpenAI-compatible embedding endpoint? (OpenAI, SiliconFlow, Ollama, or any custom service)
+Ask: "For memory search quality, Memoria needs an embedding model. Do you already have an OpenAI-compatible embedding endpoint? (OpenAI, SiliconFlow, Ollama, or any custom service)
 - **Yes** → use it directly. No download, no cold-start. Best choice.
 - **No** → use local model. ⚠️ downloads ~900MB (torch + sentence-transformers) on first install. Avoid on slow/proxied networks."
 
@@ -40,7 +40,7 @@ These values get written into the `env` block of `mcp.json` automatically — no
 
 **If user chooses local embedding, explicitly warn**: "This will download ~900MB. If you're on a slow or proxied network, consider using an OpenAI-compatible service instead. Proceed?"
 
-**After collecting embedding config, remind user**: "Once your AI tool starts, the database tables will be created with this embedding dimension. Changing it later requires running `trustmem migrate --force` (which clears existing embeddings) and re-embedding all memories via `trustmem governance`. Make sure this configuration is correct before proceeding."
+**After collecting embedding config, remind user**: "Once your AI tool starts, the database tables will be created with this embedding dimension. Changing it later requires running `memoria migrate --force` (which clears existing embeddings) and re-embedding all memories via `memoria governance`. Make sure this configuration is correct before proceeding."
 
 ## Execution Rules
 
@@ -75,17 +75,17 @@ python3 -m venv .venv
 source .venv/bin/activate
 ```
 ```bash
-# Step 5: Install TrustMem (run alone)
+# Step 5: Install Memoria (run alone)
 # If using local embedding:
-pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'trust-mem-lite[local-embedding]'
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'memoria-lite[local-embedding]'
 # If using an existing embedding service (no 900MB download):
-pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ trust-mem-lite
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ memoria-lite
 ```
 ```bash
 # Step 6: Configure (in user's project directory)
 # Add embedding flags based on Question 3 answer — see "Embedding provider flags" section below
 cd <user-project>
-trustmem init  # + embedding flags if applicable
+memoria init  # + embedding flags if applicable
 
 # If user didn't provide embedding config via flags, remind them:
 # "The config file has been created with all environment variables (even empty ones).
@@ -109,14 +109,14 @@ source .venv/bin/activate
 ```
 ```bash
 # 4. Install
-pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'trust-mem-lite[local-embedding]'
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'memoria-lite[local-embedding]'
 # or, if using an existing embedding service:
-# pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ trust-mem-lite
+# pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ memoria-lite
 ```
 ```bash
 # 5. Configure with cloud URL
 cd <user-project>
-trustmem init --db-url 'mysql+pymysql://<user>:<password>@<host>:<port>/<database>'
+memoria init --db-url 'mysql+pymysql://<user>:<password>@<host>:<port>/<database>'
 # + embedding flags if applicable (see "Embedding provider flags" section)
 ```
 
@@ -131,14 +131,14 @@ source .venv/bin/activate
 ```
 ```bash
 # 2. Install
-pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'trust-mem-lite[local-embedding]'
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'memoria-lite[local-embedding]'
 # or, if using an existing embedding service:
-# pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ trust-mem-lite
+# pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ memoria-lite
 ```
 ```bash
 # 3. Configure with existing DB
 cd <user-project>
-trustmem init --db-url 'mysql+pymysql://<user>:<password>@<host>:<port>/<database>'
+memoria init --db-url 'mysql+pymysql://<user>:<password>@<host>:<port>/<database>'
 # + embedding flags if applicable (see "Embedding provider flags" section)
 ```
 
@@ -146,14 +146,14 @@ trustmem init --db-url 'mysql+pymysql://<user>:<password>@<host>:<port>/<databas
 
 ```bash
 # Local (default) — no extra flags needed
-trustmem init
+memoria init
 
 # OpenAI
-trustmem init --embedding-provider openai --embedding-api-key sk-...
+memoria init --embedding-provider openai --embedding-api-key sk-...
 
 # Existing service (Ollama, SiliconFlow, custom endpoint, etc.)
 # All of these get written into the env block of mcp.json automatically
-trustmem init \
+memoria init \
   --embedding-provider openai \
   --embedding-base-url https://api.siliconflow.cn/v1 \
   --embedding-api-key sk-... \
@@ -164,7 +164,7 @@ trustmem init \
 The resulting `mcp.json` `env` block will contain all configurable variables (even if empty):
 ```json
 {
-  "TRUSTMEM_DB_URL": "...",
+  "MEMORIA_DB_URL": "...",
   "EMBEDDING_PROVIDER": "openai",
   "EMBEDDING_BASE_URL": "https://api.siliconflow.cn/v1",
   "EMBEDDING_API_KEY": "sk-...",
@@ -179,13 +179,13 @@ Empty values (e.g. `""`) are treated as "not set" — the MCP server uses defaul
 
 ```bash
 # Verify
-trustmem status
+memoria status
 
 # Tell user to restart their AI tool
 ```
 
 ## Troubleshooting
-- MatrixOne won't start → `docker logs trustmem-matrixone` to check errors
+- MatrixOne won't start → `docker logs memoria-matrixone` to check errors
 - Port 6001 in use → edit `.env` to change `MO_PORT`, then `docker compose up -d`
 - Can't connect to DB → MatrixOne needs 30-60s on first start, wait and retry
 - Cloud connection refused → check firewall/whitelist settings in cloud console

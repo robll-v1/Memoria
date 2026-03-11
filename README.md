@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="assets/logo.jpg" alt="TrustMem Logo" width="300"/>
+  <img src="assets/logo.jpg" alt="Memoria Logo" width="300"/>
   
-  # TrustMem
+  # Memoria
   
   **Secure · Auditable · Programmable Memory for AI Agents**
   
@@ -10,7 +10,7 @@
   [![Git for Data](https://img.shields.io/badge/Git%20for%20Data-Enabled-00A3CC?style=flat-square)](https://github.com/matrixorigin/matrixone)
   [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
   
-  [See It In Action](#see-it-in-action) · [Quick Start](#quick-start) · [Architecture](#architecture) · [API Reference](#api-reference) · [Why TrustMem?](#why-trustmem)
+  [See It In Action](#see-it-in-action) · [Quick Start](#quick-start) · [Architecture](#architecture) · [API Reference](#api-reference) · [Why Memoria?](#why-memoria)
   
 </div>
 
@@ -18,7 +18,7 @@
 
 ## Overview
 
-TrustMem is a **persistent memory layer** for AI agents with Git-level version control.
+Memoria is a **persistent memory layer** for AI agents with Git-level version control.
 Every memory change is tracked, auditable, and reversible — snapshots, branches, merges, and time-travel rollback, all powered by MatrixOne's native Copy-on-Write engine.
 
 ```mermaid
@@ -33,7 +33,7 @@ Every memory change is tracked, auditable, and reversible — snapshots, branche
 
 graph TD
     A[AI Agent] 
-    -->|MCP Protocol| B[TrustMem Core]
+    -->|MCP Protocol| B[Memoria Core]
 
     B --> C[Canonical Storage<br/>Single Source of Truth]
     B --> D[Retrieval Strategy<br/>Pluggable Search]
@@ -76,9 +76,9 @@ graph TD
 
 ---
 
-## Why TrustMem?
+## Why Memoria?
 
-| Capability | TrustMem | Letta / Mem0 / Traditional RAG |
+| Capability | Memoria | Letta / Mem0 / Traditional RAG |
 |---|---|---|
 | Git-level version control | Native zero-copy snapshots & branches | File-level or none |
 | Isolated experimentation | One-click branch, merge after validation | Manual data duplication |
@@ -94,7 +94,7 @@ graph TD
 Here's a real setup conversation in Cursor — just tell the agent what you want, it handles the rest:
 
 ```
-You:     I want to set up TrustMem for persistent memory.
+You:     I want to set up Memoria for persistent memory.
 
 Cursor:  Before I start, a few quick questions:
 
@@ -110,7 +110,7 @@ Cursor:  Got it. I'll start MatrixOne with Docker first — running:
 
            docker compose up -d
 
-You:     [output] Container trustmem-matrixone started
+You:     [output] Container memoria-matrixone started
 
 Cursor:  MatrixOne is initializing, takes about 30 seconds on first start.
          While we wait — what's your SiliconFlow API key and which model do you use?
@@ -118,17 +118,17 @@ Cursor:  MatrixOne is initializing, takes about 30 seconds on first start.
 
 You:     key is sk-xxxx, model BAAI/bge-m3
 
-Cursor:  Database is ready. Installing TrustMem now:
+Cursor:  Database is ready. Installing Memoria now:
 
            pip install --index-url https://pypi.org/simple/ \
              --extra-index-url https://test.pypi.org/simple/ \
-             trust-mem-lite
+             memoria-lite
 
-You:     [output] Successfully installed trust-mem-lite-0.2.5
+You:     [output] Successfully installed memoria-lite-0.2.5
 
 Cursor:  Configuring for Cursor with your SiliconFlow endpoint:
 
-           trustmem init \
+           memoria init \
              --embedding-provider openai \
              --embedding-base-url https://api.siliconflow.cn/v1 \
              --embedding-api-key sk-xxxx \
@@ -145,10 +145,10 @@ You:     Restarted. Does it work?
 
 Cursor:  Let me check:
 
-           trustmem status
+           memoria status
 
-         TrustMem Status
-           Database:   connected (mysql+pymysql://root:***@localhost:6001/trustmem)
+         Memoria Status
+           Database:   connected (mysql+pymysql://root:***@localhost:6001/memoria)
            Tables:     8 tables OK
            Embedding:  openai (BAAI/bge-m3, dim=1024) via https://api.siliconflow.cn/v1
            Cursor:     .cursor/mcp.json ✓  |  .cursor/rules/memory.mdc ✓
@@ -169,8 +169,8 @@ Cursor:  Let me check:
 ### 1. Start MatrixOne (database)
 
 ```bash
-git clone https://github.com/matrixorigin/TrustMem.git
-cd TrustMem
+git clone https://github.com/matrixorigin/Memoria.git
+cd Memoria
 docker compose up -d
 # Wait ~30-60s for first-time initialization
 ```
@@ -182,15 +182,15 @@ docker run -d --name matrixone -p 6001:6001 -v ./data/matrixone:/mo-data --memor
 
 See [docker-compose.yml](docker-compose.yml) for configuration options. Don't want Docker? Use [MatrixOne Cloud](https://cloud.matrixorigin.cn) (free tier).
 
-### 2. Install TrustMem
+### 2. Install Memoria
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 
-pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'trust-mem-lite[local-embedding]'
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'memoria-lite[local-embedding]'
 ```
 
-> `[local-embedding]` installs a local embedding model (~900MB download on first use). If you already have an embedding service (OpenAI, SiliconFlow, Ollama), skip this and use `trust-mem-lite` instead — see [Embedding providers](#embedding-providers).
+> `[local-embedding]` installs a local embedding model (~900MB download on first use). If you already have an embedding service (OpenAI, SiliconFlow, Ollama), skip this and use `memoria-lite` instead — see [Embedding providers](#embedding-providers).
 
 **⚠️ Before step 3**: If you plan to use a custom embedding provider, configure it now (see [Embedding providers](#embedding-providers)). Once your AI tool starts, the database schema is locked to that embedding dimension.
 
@@ -198,7 +198,7 @@ pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.
 
 ```bash
 cd your-project
-trustmem init
+memoria init
 ```
 
 This creates MCP config files with **all environment variables** (even if empty) as a guide. If you need to customize (e.g., change database URL, add embedding API key), edit the generated config before restarting:
@@ -212,13 +212,13 @@ Then restart your AI tool — database tables are created automatically when the
 ### 4. Verify
 
 ```bash
-trustmem status
+memoria status
 ```
 
 Expected output:
 ```
-TrustMem Status
-  Database:    connected (mysql+pymysql://root:***@localhost:6001/trustmem)
+Memoria Status
+  Database:    connected (mysql+pymysql://root:***@localhost:6001/memoria)
   Tables:      8 tables OK
   Embedding:   local (all-MiniLM-L6-v2, dim=384)
   Kiro:        .kiro/settings/mcp.json ✓  |  .kiro/steering/memory.md ✓ (v0.2.5)
@@ -235,7 +235,7 @@ TrustMem Status
 ```bash
 cd your-project
 mkdir -p .kiro
-trustmem init
+memoria init
 # Restart Kiro
 ```
 
@@ -248,7 +248,7 @@ Files created:
 ```bash
 cd your-project
 mkdir -p .cursor
-trustmem init
+memoria init
 # Restart Cursor
 ```
 
@@ -260,7 +260,7 @@ Files created:
 
 ```bash
 cd your-project
-trustmem init
+memoria init
 # Restart Claude Code
 ```
 
@@ -270,7 +270,7 @@ Files created:
 
 ### All tools at once
 
-If your project has `.kiro/`, `.cursor/`, and `CLAUDE.md`, `trustmem init` configures all of them in one go.
+If your project has `.kiro/`, `.cursor/`, and `CLAUDE.md`, `memoria init` configures all of them in one go.
 
 ---
 
@@ -279,12 +279,12 @@ If your project has `.kiro/`, `.cursor/`, and `CLAUDE.md`, `trustmem init` confi
 ### Custom database URL
 
 ```bash
-trustmem init --db-url 'mysql+pymysql://user:pass@host:6001/mydb'
+memoria init --db-url 'mysql+pymysql://user:pass@host:6001/mydb'
 ```
 
 ### Embedding providers
 
-TrustMem needs an embedding model to vectorize memories for semantic search.
+Memoria needs an embedding model to vectorize memories for semantic search.
 
 | Provider | Quality | Cost | First-use latency | Ongoing latency |
 |----------|---------|------|-------------------|-----------------|
@@ -297,20 +297,20 @@ TrustMem needs an embedding model to vectorize memories for semantic search.
 **⚠️ CRITICAL: Configure embedding BEFORE your AI tool starts for the first time.**
 
 The MCP server creates database tables with the configured embedding dimension on first startup. Once memories are stored, changing the embedding provider requires:
-1. Running `trustmem migrate --dim <new_dim> --force` to ALTER the column (destructive)
-2. Re-embedding all existing memories via `trustmem governance`
+1. Running `memoria migrate --dim <new_dim> --force` to ALTER the column (destructive)
+2. Re-embedding all existing memories via `memoria governance`
 
 Choose your embedding provider carefully at setup time to avoid this migration overhead.
 
 ```bash
 # Local (default) — no extra flags needed
-trustmem init
+memoria init
 
 # OpenAI
-trustmem init --embedding-provider openai --embedding-api-key sk-...
+memoria init --embedding-provider openai --embedding-api-key sk-...
 
 # Custom endpoint (Ollama, SiliconFlow, etc.)
-trustmem init \
+memoria init \
   --embedding-provider openai \
   --embedding-base-url https://api.siliconflow.cn/v1 \
   --embedding-api-key sk-... \
@@ -324,10 +324,10 @@ All flags are written into the `env` block of `mcp.json` automatically — no ma
 
 #### Switching Embedding Provider
 
-If you want to switch providers after tables already exist, run `migrate --force` to ALTER the embedding column (this clears existing embeddings — memories are kept but will need to be re-embedded manually via `trustmem governance`):
+If you want to switch providers after tables already exist, run `migrate --force` to ALTER the embedding column (this clears existing embeddings — memories are kept but will need to be re-embedded manually via `memoria governance`):
 
 ```bash
-trustmem migrate --dim 1536 --force
+memoria migrate --dim 1536 --force
 ```
 
 ---
@@ -336,7 +336,7 @@ trustmem migrate --dim 1536 --force
 
 ```
 ┌─────────────┐     MCP (stdio)     ┌──────────────────────────────────────┐     SQL      ┌────────────┐
-│  Kiro /      │ ◄─────────────────► │  TrustMem MCP Server               │ ◄──────────► │ MatrixOne  │
+│  Kiro /      │ ◄─────────────────► │  Memoria MCP Server                │ ◄──────────► │ MatrixOne  │
 │  Cursor /    │   store / retrieve  │  ├── Canonical Storage              │  vector +    │  Database  │
 │  Claude Code │                     │  ├── Retrieval (vector / semantic)  │  fulltext    │            │
 │  Any Agent   │                     │  └── Git-for-Data (snap/branch/merge)│             │            │
@@ -347,7 +347,7 @@ trustmem migrate --dim 1536 --force
 
 ## API Reference
 
-TrustMem exposes MCP tools that your AI tool calls automatically based on steering rules. You can also invoke them directly.
+Memoria exposes MCP tools that your AI tool calls automatically based on steering rules. You can also invoke them directly.
 
 ### Core CRUD
 
@@ -470,12 +470,12 @@ AI:  → calls memory_branch(name="debug", from_timestamp="2026-03-11 10:00:00")
 
 | Command | Description |
 |---------|-------------|
-| `trustmem init` | Write MCP config + steering rules (tables created on first MCP start) |
-| `trustmem status` | Show configuration and rule versions |
-| `trustmem update-rules` | Update steering rules to latest version |
-| `trustmem migrate` | Create/update database tables manually |
-| `trustmem health` | Check memory service health |
-| `trustmem governance` | Run memory cleanup and maintenance |
+| `memoria init` | Write MCP config + steering rules (tables created on first MCP start) |
+| `memoria status` | Show configuration and rule versions |
+| `memoria update-rules` | Update steering rules to latest version |
+| `memoria migrate` | Create/update database tables manually |
+| `memoria health` | Check memory service health |
+| `memoria governance` | Run memory cleanup and maintenance |
 
 ---
 
@@ -493,16 +493,16 @@ CRITICAL: At the start of EVERY conversation, call memory_retrieve with the user
 
 ## Adapting to Other Agents
 
-TrustMem uses the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) standard. Any MCP-compatible agent can integrate by pointing to the server:
+Memoria uses the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) standard. Any MCP-compatible agent can integrate by pointing to the server:
 
 ```json
 {
   "mcpServers": {
-    "trustmem": {
+    "memoria": {
       "command": "python",
       "args": ["-m", "mo_memory_mcp"],
       "env": {
-        "TRUSTMEM_DB_URL": "mysql+pymysql://root:111@localhost:6001/trustmem",
+        "MEMORIA_DB_URL": "mysql+pymysql://root:111@localhost:6001/memoria",
         "EMBEDDING_PROVIDER": "",
         "EMBEDDING_MODEL": "",
         "EMBEDDING_DIM": "",
@@ -533,41 +533,41 @@ docker start matrixone
 ### "sentence-transformers not installed"
 
 ```bash
-pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'trust-mem-lite[local-embedding]'
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'memoria-lite[local-embedding]'
 ```
 
 ### First query is slow
 
 Expected with local embedding — model loads into memory on first query (~3-5s). Use an embedding service to avoid this:
 ```bash
-trustmem init --embedding-provider openai --embedding-api-key sk-...
+memoria init --embedding-provider openai --embedding-api-key sk-...
 ```
 
 ### AI tool doesn't seem to use memory
 
-1. Check config: `trustmem status`
-2. Restart the AI tool after `trustmem init`
+1. Check config: `memoria status`
+2. Restart the AI tool after `memoria init`
 3. Verify MCP server starts: `python -m mo_memory_mcp`
 
 ### Update steering rules after upgrading
 
 ```bash
-pip install --upgrade trust-mem-lite
-trustmem update-rules
+pip install --upgrade memoria-lite
+memoria update-rules
 ```
 
 ---
 
 ## For AI Agents
 
-If you're an AI agent helping a user set up TrustMem, **ask before acting**:
+If you're an AI agent helping a user set up Memoria, **ask before acting**:
 
 1. **Which AI tool?** Kiro / Cursor / Claude Code?
 2. **MatrixOne database?** Already have one → get URL. Local Docker → `docker compose up -d`. [MatrixOne Cloud](https://cloud.matrixorigin.cn) → no Docker needed.
 3. **Embedding?** ⚠️ **CRITICAL: Ask this BEFORE installation.** Once the MCP server starts, the embedding dimension is locked into the database schema. Changing it later requires `migrate --force` (clears embeddings) + re-embedding all memories. Already have a service (OpenAI/SiliconFlow/Ollama)? Use it. Otherwise local is fine.
-4. **Install**: `pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'trust-mem-lite[local-embedding]'`
-5. **Configure**: `cd <user-project> && trustmem init` (with embedding flags if applicable)
-6. **Verify**: `trustmem status`
+4. **Install**: `pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ 'memoria-lite[local-embedding]'`
+5. **Configure**: `cd <user-project> && memoria init` (with embedding flags if applicable)
+6. **Verify**: `memoria status`
 7. Tell user to **restart their AI tool**
 
 For detailed troubleshooting, see [SETUP_GUIDE.md](SETUP_GUIDE.md).

@@ -1,4 +1,4 @@
-# TrustMem — MatrixOne Database
+# Memoria — MatrixOne Database
 #
 # Usage:
 #   docker compose up -d          # Start
@@ -17,7 +17,7 @@
 services:
   matrixone:
     image: ${MO_IMAGE:-matrixorigin/matrixone:latest}
-    container_name: ${MO_CONTAINER_NAME:-trustmem-matrixone}
+    container_name: ${MO_CONTAINER_NAME:-memoria-matrixone}
     hostname: matrixone
     ports:
       - "${MO_PORT:-6001}:6001"
