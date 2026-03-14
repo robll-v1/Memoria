@@ -22,6 +22,24 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _apply_post_filters(
+    memories: list[Memory],
+    *,
+    memory_types: list[MemoryType] | None = None,
+    session_id: str = "",
+    include_cross_session: bool = True,
+) -> list[Memory]:
+    """Apply memory_types / session / cross-session filters to graph results."""
+    result = memories
+    if memory_types:
+        allowed = set(memory_types)
+        result = [m for m in result if m.memory_type in allowed]
+    if session_id and not include_cross_session:
+        result = [m for m in result if m.session_id == session_id]
+    return result
+
+
 # NodeType → MemoryType: preserve original type from graph node
 _NODE_TO_MEMORY: dict[str, MemoryType] = {
     "episodic": MemoryType.WORKING,
@@ -78,7 +96,8 @@ class ActivationRetrievalStrategy:
         include_cross_session: bool = True,
         explain: bool = False,
     ) -> tuple[list[Memory], Any]:
-        """Retrieve via graph activation, fallback to vector if no results."""
+        """Retrieve via graph activation, fallback to vector if insufficient."""
+        graph_memories: list[Memory] = []
         if query_embedding:
             try:
                 activated = self._activation_retriever.retrieve(
@@ -89,27 +108,33 @@ class ActivationRetrievalStrategy:
                     task_type=task_type,
                 )
                 if activated:
-                    memories = self._nodes_to_memories(activated, user_id)
-                    logger.info(
-                        "activation:v1 graph path — user=%s results=%d",
-                        user_id,
-                        len(memories),
+                    graph_memories = self._nodes_to_memories(activated, user_id)
+                    graph_memories = _apply_post_filters(
+                        graph_memories,
+                        memory_types=memory_types,
+                        session_id=session_id,
+                        include_cross_session=include_cross_session,
                     )
-                    explain_info = (
-                        {"path": "graph", "results": len(memories)} if explain else None
-                    )
-                    return memories, explain_info
             except Exception:
                 logger.warning(
                     "Activation retrieval failed, using vector fallback",
                     exc_info=True,
                 )
 
-        # Vector fallback when graph returns nothing
-        logger.warning(
-            "activation:v1 vector fallback — user=%s query=%r", user_id, query
-        )
-        memories, vec_explain = self._get_vector_fallback().retrieve(
+        # If graph returned enough results, use them directly
+        if len(graph_memories) >= top_k:
+            logger.info(
+                "activation:v1 graph path — user=%s results=%d",
+                user_id,
+                len(graph_memories),
+            )
+            explain_info = (
+                {"path": "graph", "results": len(graph_memories)} if explain else None
+            )
+            return graph_memories[:top_k], explain_info
+
+        # Graph insufficient — supplement with vector results
+        vec_memories, vec_explain = self._get_vector_fallback().retrieve(
             user_id,
             query,
             query_embedding,
@@ -121,9 +146,36 @@ class ActivationRetrievalStrategy:
             include_cross_session=include_cross_session,
             explain=explain,
         )
+
+        # Merge: deduplicate, then sort by retrieval_score descending.
+        # Graph results have activation-based scores; vector results have
+        # vector/keyword scores. Sorting by score lets the best results win
+        # regardless of which path produced them.
+        seen: set[str] = set()
+        pool: list[Memory] = []
+        for m in graph_memories + vec_memories:
+            if m.memory_id not in seen:
+                seen.add(m.memory_id)
+                pool.append(m)
+        pool.sort(key=lambda m: m.retrieval_score or 0.0, reverse=True)
+        merged = pool[:top_k]
+
+        path = "graph+vector" if graph_memories else "vector_fallback"
+        logger.info(
+            "activation:v1 %s — user=%s graph=%d vector=%d merged=%d",
+            path,
+            user_id,
+            len(graph_memories),
+            len(vec_memories),
+            len(merged),
+        )
         if explain:
-            return memories, {"path": "vector_fallback", "vec_explain": vec_explain}
-        return memories, vec_explain
+            return merged, {
+                "path": path,
+                "graph_results": len(graph_memories),
+                "vec_explain": vec_explain,
+            }
+        return merged, vec_explain
 
     def _get_vector_fallback(self) -> Any:
         """Lazy-init vector fallback."""
@@ -154,7 +206,9 @@ class ActivationRetrievalStrategy:
             if mid in tabular:
                 if mid not in seen:
                     seen.add(mid)
-                    memories.append(tabular[mid])
+                    mem = tabular[mid]
+                    mem.retrieval_score = round(_score, 4)
+                    memories.append(mem)
                 continue
             # Skip entity/scene nodes that have no backing memory row
             if not node.memory_id:
@@ -176,6 +230,7 @@ class ActivationRetrievalStrategy:
                         embedding=node.embedding,
                         session_id=node.session_id,
                         trust_tier=tier,
+                        retrieval_score=round(_score, 4),
                     )
                 )
         return memories

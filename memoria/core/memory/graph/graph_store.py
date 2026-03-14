@@ -44,7 +44,7 @@ def _to_domain(row: GraphNode) -> GraphNodeData:
         cross_session_count=row.cross_session_count or 0,
         is_active=bool(row.is_active),
         superseded_by=row.superseded_by,
-        created_at=str(row.created_at) if row.created_at else None,
+        created_at=row.created_at,
     )
 
 
@@ -71,13 +71,13 @@ def _row_tuple_to_domain(row) -> GraphNodeData:
         cross_session_count=getattr(row, "cross_session_count", 0) or 0,
         is_active=bool(row.is_active),
         superseded_by=getattr(row, "superseded_by", None),
-        created_at=str(row.created_at) if getattr(row, "created_at", None) else None,
+        created_at=getattr(row, "created_at", None),
     )
 
 
 def _to_row(node: GraphNodeData) -> dict:
     """Convert domain object to column dict for INSERT."""
-    return {
+    row: dict = {
         "node_id": node.node_id,
         "user_id": node.user_id,
         "node_type": node.node_type.value
@@ -100,6 +100,9 @@ def _to_row(node: GraphNodeData) -> dict:
         "is_active": 1 if node.is_active else 0,
         "superseded_by": node.superseded_by,
     }
+    if node.created_at is not None:
+        row["created_at"] = node.created_at
+    return row
 
 
 class GraphStore(DbConsumer):

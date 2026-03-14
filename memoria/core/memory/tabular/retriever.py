@@ -135,7 +135,23 @@ class MemoryRetriever(DbConsumer):
             t in memory_types for t in (MemoryType.WORKING, MemoryType.TOOL_RESULT)
         )
         if session_id and not caller_excluded_l0:
-            l0_memories = self._load_l0(user_id, session_id)
+            l0_memories = self._load_l0(user_id, session_id, query_embedding)
+            # Score L0 memories so retrieval_score is populated consistently.
+            # vec_score=0 (no l2_dist), keyword_score=0 (not from fulltext search).
+            now_ts = time.time()
+            for m in l0_memories:
+                c = _Candidate(
+                    memory_id=m.memory_id,
+                    content=m.content,
+                    memory_type=m.memory_type.value,
+                    initial_confidence=m.initial_confidence,
+                    observed_at=m.observed_at,
+                    session_id=m.session_id,
+                    trust_tier=m.trust_tier.value if m.trust_tier else "T3",
+                    access_count=m.access_count,
+                )
+                score = self._score_candidate(c, weights, now_ts)[0]
+                m.retrieval_score = round(score, 4)
 
         # ── L1: cross-session semantic/procedural/profile (default retrieval) ──
         l1_types = memory_types or [
@@ -149,16 +165,22 @@ class MemoryRetriever(DbConsumer):
         ]
         type_values = tuple(t.value for t in l1_types) if l1_types else ()
 
-        # Reserve slots for L0 in the final limit
-        l1_limit = max(1, limit - len(l0_memories))
-
         if not type_values:
-            # Only L0 types requested — skip L1 entirely
+            # Only L0 types requested — skip L1 entirely, return up to limit (no cap).
             memories = l0_memories[:limit]
             if stats:
                 stats.final_count = len(memories)
                 stats.total_ms = (time.time() - start) * 1000
             return memories, stats
+
+        # Cap L0 at floor(limit/2) so L1 always gets at least ceil(limit/2) slots,
+        # preventing many working memories from crowding out long-term semantic memories.
+        # This cap only applies when L1 is also being queried (type_values is non-empty).
+        l0_cap = limit // 2  # floor: e.g. limit=5→2, limit=3→1, limit=1→0
+        l0_memories = l0_memories[:l0_cap]
+
+        # Reserve remaining slots for L1
+        l1_limit = max(1, limit - len(l0_memories))
 
         base_params = {
             "uid": user_id,
@@ -191,7 +213,13 @@ class MemoryRetriever(DbConsumer):
                 logger.warning(
                     "tabular_retriever: query_embedding is None, skipping phase2 vector search"
                 )
-                l1 = [self._to_memory(c, user_id) for c in phase1[:l1_limit]]
+                now_ts = time.time()
+                l1 = [
+                    self._to_memory(
+                        c, user_id, score=self._score_candidate(c, weights, now_ts)[0]
+                    )
+                    for c in phase1[:l1_limit]
+                ]
                 memories = l0_memories + l1
                 memories = memories[:limit]
                 if stats:
@@ -231,37 +259,59 @@ class MemoryRetriever(DbConsumer):
 
             return memories, stats
 
-    def _load_l0(self, user_id: str, session_id: str) -> list[Memory]:
+    def _load_l0(
+        self,
+        user_id: str,
+        session_id: str,
+        query_embedding: Optional[list[float]] = None,
+    ) -> list[Memory]:
         """L0: Load active working/tool_result memories for the current session.
 
-        These are always included (no scoring) — they represent immediate context.
-        Ordered by recency (newest first).
+        These are always included — they represent immediate context.
+        When query_embedding is available, ordered by vector relevance;
+        otherwise by recency (newest first).
         """
         from memoria.core.memory.models.memory import MemoryRecord as M
 
         with self._db() as db:
-            rows = (
-                db.query(
-                    M.memory_id,
-                    M.content,
-                    M.memory_type,
-                    M.initial_confidence,
-                    M.observed_at,
-                    M.session_id,
-                    M.trust_tier,
-                )
-                .filter(
-                    M.user_id == user_id,
-                    M.session_id == session_id,
-                    M.is_active > 0,
-                    M.memory_type.in_(
-                        (MemoryType.WORKING.value, MemoryType.TOOL_RESULT.value)
-                    ),
-                )
-                .order_by(M.observed_at.desc())
-                .limit(20)
-                .all()
+            q = db.query(
+                M.memory_id,
+                M.content,
+                M.memory_type,
+                M.initial_confidence,
+                M.observed_at,
+                M.session_id,
+                M.trust_tier,
+            ).filter(
+                M.user_id == user_id,
+                M.session_id == session_id,
+                M.is_active > 0,
+                M.memory_type.in_(
+                    (MemoryType.WORKING.value, MemoryType.TOOL_RESULT.value)
+                ),
             )
+            if query_embedding:
+                try:
+                    from matrixone.sqlalchemy_ext import l2_distance
+
+                    dist = l2_distance(M.embedding, query_embedding).label("l2_dist")
+                    # Use CASE to sort: records with embeddings first (by distance),
+                    # then records without embeddings (by recency). Do NOT filter out
+                    # records without embeddings — L0 represents immediate context and
+                    # should always be visible regardless of embedding availability.
+                    from sqlalchemy import case, literal
+
+                    has_emb = case(
+                        (M.embedding.isnot(None), literal(0)), else_=literal(1)
+                    )
+                    q = q.add_columns(dist).order_by(
+                        has_emb, "l2_dist", M.observed_at.desc()
+                    )
+                except Exception:
+                    q = q.order_by(M.observed_at.desc())
+            else:
+                q = q.order_by(M.observed_at.desc())
+            rows = q.limit(20).all()
         return [
             Memory(
                 memory_id=r.memory_id,
@@ -456,7 +506,10 @@ class MemoryRetriever(DbConsumer):
             return [], stats
 
     def _score_candidate(
-        self, c: _Candidate, weights: RetrievalWeights, now_ts: float
+        self,
+        c: _Candidate,
+        weights: RetrievalWeights,
+        now_ts: float,
     ) -> tuple[float, float, float, float, float]:
         """Compute 4-dimension scores + weighted final score for a candidate."""
         vec_score = 1.0 / (1.0 + c.l2_dist) if c.l2_dist is not None else 0.0
@@ -561,17 +614,19 @@ class MemoryRetriever(DbConsumer):
                 )
                 for i, (sc, c) in enumerate(selected)
             ]
-            return [self._to_memory(c, user_id) for _, c in selected]
+            return [self._to_memory(c, user_id, score=sc[0]) for sc, c in selected]
 
         # Hot path: only compute final score, skip per-dimension breakdown
         scored = [
             (self._score_candidate(c, weights, now_ts)[0], c) for c in merged.values()
         ]
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [self._to_memory(c, user_id) for _, c in scored[:limit]]
+        return [self._to_memory(c, user_id, score=s) for s, c in scored[:limit]]
 
     @staticmethod
-    def _to_memory(c: _Candidate, user_id: str) -> Memory:
+    def _to_memory(
+        c: _Candidate, user_id: str, score: Optional[float] = None
+    ) -> Memory:
         return Memory(
             memory_id=c.memory_id,
             user_id=user_id,
@@ -584,6 +639,7 @@ class MemoryRetriever(DbConsumer):
             trust_tier=TrustTier(c.trust_tier)
             if c.trust_tier
             else TrustTier.T3_INFERRED,
+            retrieval_score=round(score, 4) if score is not None else None,
         )
 
     def _bump_access_counts(self, memory_ids: list[str]) -> None:
