@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.3] - 2026-03-21
+
+### ⚡ Performance
+
+- Fix performance issues (#73) ([b64de86](https://github.com/matrixorigin/Memoria/commit/b64de86360b0d795917df22985b9a1650e889191))
+
+### 📚 Documentation
+
+- **readme**: Polish beat card spacing and idea bulb icon (#69) ([c88cccc](https://github.com/matrixorigin/Memoria/commit/c88cccccfe9c07ccc6cb728d5731d71e310cd2e3))
+- Add Git for Data story demo (#66) ([2d71edb](https://github.com/matrixorigin/Memoria/commit/2d71edbeed9d4112f66e719b6ef578607cadf8ba))
+
+### 🚀 Features
+
+- Add ClawHub Memoria skill bundle (#71) ([7b4034a](https://github.com/matrixorigin/Memoria/commit/7b4034a6e416d1bc92711f0e5227784d3c76e5d3))
+- Distributed Deployment: Health Checks, Pool Metrics, OpenTelemetry, Grafana Dashboard (#67) ([cd77c9e](https://github.com/matrixorigin/Memoria/commit/cd77c9e350b452935044273ebfdae40d6500a7c9))
+
+### 🧪 Testing
+
+- Add more test (#68) ([50c3d9a](https://github.com/matrixorigin/Memoria/commit/50c3d9a4d19eb2ee0006ac0be5bbc57837568a84))
 ## [0.2.2] - 2026-03-20
 
 ### 🐛 Bug Fixes
