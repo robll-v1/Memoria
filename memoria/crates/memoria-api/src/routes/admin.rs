@@ -6,7 +6,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use memoria_service::{ConsolidationInput, ConsolidationStrategy, DefaultConsolidationStrategy};
+use memoria_service::{ConsolidationInput, ConsolidationStrategy, DefaultConsolidationStrategy, GovernanceStore};
 use serde::{Deserialize, Serialize};
 use sqlx::{MySqlPool, Row};
 
@@ -209,6 +209,8 @@ pub async fn trigger_governance(
 
     match op {
         "governance" => {
+            // Diagnostic first — must run before physical deletions destroy evidence
+            let pollution_detected = sql.detect_pollution(&user_id, 24).await.map_err(db_err)?;
             let quarantined = sql
                 .quarantine_low_confidence(&user_id)
                 .await
@@ -224,7 +226,10 @@ pub async fn trigger_governance(
                 .cleanup_orphaned_incrementals(&user_id, 24)
                 .await
                 .map_err(db_err)?;
-            let pollution_detected = sql.detect_pollution(&user_id, 24).await.map_err(db_err)?;
+            let orphan_graph_cleaned = sql.cleanup_orphan_graph_data().await.unwrap_or_else(|e| {
+                tracing::warn!("orphan graph cleanup failed: {e}");
+                0
+            });
             Ok(Json(serde_json::json!({
                 "op": op, "user_id": user_id,
                 "quarantined": quarantined,
@@ -234,6 +239,7 @@ pub async fn trigger_governance(
                 "compressed_redundant": compressed,
                 "cleaned_incrementals": cleaned_incrementals,
                 "pollution_detected": pollution_detected,
+                "orphan_graph_cleaned": orphan_graph_cleaned,
             })))
         }
         "consolidate" => {
@@ -279,6 +285,35 @@ pub async fn trigger_governance(
 }
 
 // ── Health endpoints (per-user, no admin required) ───────────────────────────
+
+/// GET /v1/health/hygiene — per-user orphan/stale diagnostics
+pub async fn health_hygiene(
+    AuthUser { user_id, .. }: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let sql = state
+        .service
+        .sql_store
+        .as_ref()
+        .ok_or((StatusCode::SERVICE_UNAVAILABLE, "SQL store required".into()))?;
+    let result = sql.health_hygiene(&user_id).await.map_err(db_err)?;
+    Ok(Json(result))
+}
+
+/// GET /admin/health/hygiene — global orphan/stale diagnostics
+pub async fn health_hygiene_global(
+    auth: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    auth.require_master()?;
+    let sql = state
+        .service
+        .sql_store
+        .as_ref()
+        .ok_or((StatusCode::SERVICE_UNAVAILABLE, "SQL store required".into()))?;
+    let result = sql.health_hygiene_global().await.map_err(db_err)?;
+    Ok(Json(result))
+}
 
 /// GET /v1/health/analyze — per-type stats
 pub async fn health_analyze(
