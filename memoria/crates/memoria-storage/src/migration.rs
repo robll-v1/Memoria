@@ -70,6 +70,21 @@ pub struct TableMigrationReport {
     pub note: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingLegacyMultiDbMigration {
+    pub legacy_db_name: String,
+    pub shared_db_name: String,
+    pub legacy_users: Vec<String>,
+    pub missing_users: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RuntimeTopology {
+    FreshSingleDb,
+    PendingLegacyMigration(PendingLegacyMultiDbMigration),
+    MultiDbReady,
+}
+
 #[derive(Debug, Clone)]
 struct ColumnSpec {
     name: String,
@@ -102,6 +117,44 @@ pub async fn execute_legacy_single_db_to_multi_db(
 ) -> Result<LegacyToMultiDbMigrationReport, MemoriaError> {
     run_legacy_single_db_to_multi_db(legacy_db_url, shared_db_url, embedding_dim, options, false)
         .await
+}
+
+pub async fn detect_runtime_topology(
+    legacy_db_url: &str,
+    shared_db_url: &str,
+) -> Result<RuntimeTopology, MemoriaError> {
+    let legacy_db_name = parse_db_name(legacy_db_url)?;
+    let shared_db_name = parse_db_name(shared_db_url)?;
+    if legacy_db_name == shared_db_name {
+        return Ok(RuntimeTopology::FreshSingleDb);
+    }
+
+    let legacy_pool = match connect_pool(legacy_db_url).await {
+        Ok(pool) => pool,
+        Err(MemoriaError::Database(msg))
+            if is_unknown_database_error_message(&msg, &legacy_db_name) =>
+        {
+            let shared_users =
+                load_active_shared_registry_users_or_empty(shared_db_url, &shared_db_name).await?;
+            return Ok(classify_runtime_topology(
+                legacy_db_name,
+                shared_db_name,
+                vec![],
+                shared_users,
+            ));
+        }
+        Err(err) => return Err(err),
+    };
+    let legacy_users = discover_users(&legacy_pool, &legacy_db_name).await?;
+    let shared_users =
+        load_active_shared_registry_users_or_empty(shared_db_url, &shared_db_name).await?;
+
+    Ok(classify_runtime_topology(
+        legacy_db_name,
+        shared_db_name,
+        legacy_users,
+        shared_users,
+    ))
 }
 
 async fn run_legacy_single_db_to_multi_db(
@@ -161,14 +214,14 @@ async fn run_legacy_single_db_to_multi_db(
         None
     } else {
         let snapshot_name = create_required_account_snapshot(&legacy_pool, &legacy_db_name).await?;
-        println!("Created pre-execute account snapshot {snapshot_name}");
+        eprintln!("Created pre-execute account snapshot {snapshot_name}");
         Some(snapshot_name)
     };
 
     let shared_store = if dry_run {
         None
     } else {
-        println!("Resetting target shared database {shared_db_name}");
+        eprintln!("Resetting target shared database {shared_db_name}");
         reset_database(shared_db_url).await?;
         let shared_store =
             SqlMemoryStore::connect(shared_db_url, embedding_dim, MIGRATION_INSTANCE_ID.into())
@@ -192,7 +245,7 @@ async fn run_legacy_single_db_to_multi_db(
     let mut shared_tables = Vec::new();
     for table in SHARED_DURABLE_TABLES {
         if !dry_run {
-            println!("Copying shared table {table}");
+            eprintln!("Copying shared table {table}");
         }
         shared_tables.push(
             copy_shared_table(
@@ -215,7 +268,7 @@ async fn run_legacy_single_db_to_multi_db(
         // Serial path (original behavior)
         for user_id in &selected_users {
             if !dry_run {
-                println!("Migrating user {user_id}");
+                eprintln!("Migrating user {user_id}");
             }
             users.push(
                 migrate_user(
@@ -242,10 +295,9 @@ async fn run_legacy_single_db_to_multi_db(
                     let execute = !dry_run;
                     async move {
                         if execute {
-                            println!("Migrating user {user_id}");
+                            eprintln!("Migrating user {user_id}");
                         }
-                        let res =
-                            migrate_user(pool, db_name, router_ref, user_id, execute).await;
+                        let res = migrate_user(pool, db_name, router_ref, user_id, execute).await;
                         (user_id.as_str(), res)
                     }
                 })
@@ -293,7 +345,7 @@ async fn migrate_user(
             .ok_or_else(|| MemoriaError::Internal("missing router for execute mode".into()))?;
         let target_db = DbRouter::user_db_name_for_id(user_id);
         let target_url = router.user_db_url(&target_db)?;
-        println!("  Resetting target user database {target_db}");
+        eprintln!("  Resetting target user database {target_db}");
         reset_database(&target_url).await?;
         router.invalidate_user(user_id).await;
         // Register user in shared DB so runtime can discover it later
@@ -330,7 +382,7 @@ async fn migrate_user(
             .filter(|table| !is_physical_branch_table(table))
             .collect::<Vec<_>>();
         for table in target_tables {
-            println!("  Copying user table {table}");
+            eprintln!("  Copying user table {table}");
             tables.push(
                 copy_user_scoped_table(
                     legacy_pool,
@@ -346,7 +398,7 @@ async fn migrate_user(
         }
 
         tables.push({
-            println!("  Copying user table mem_memories_stats");
+            eprintln!("  Copying user table mem_memories_stats");
             copy_memories_stats_table(
                 legacy_pool,
                 legacy_db_name,
@@ -360,7 +412,7 @@ async fn migrate_user(
 
         let branches = load_branch_records(legacy_pool, legacy_db_name, user_id).await?;
         for branch in branches {
-            println!("  Copying branch table {}", branch.table_name);
+            eprintln!("  Copying branch table {}", branch.table_name);
             let mut report = copy_branch_table(
                 legacy_pool,
                 legacy_db_name,
@@ -568,6 +620,39 @@ fn split_database_url(database_url: &str) -> Option<(&str, &str, &str)> {
     Some((base, db_name, suffix))
 }
 
+fn classify_runtime_topology(
+    legacy_db_name: String,
+    shared_db_name: String,
+    mut legacy_users: Vec<String>,
+    shared_users: BTreeSet<String>,
+) -> RuntimeTopology {
+    legacy_users.sort();
+    legacy_users.dedup();
+    if legacy_users.is_empty() {
+        return if shared_users.is_empty() {
+            RuntimeTopology::FreshSingleDb
+        } else {
+            RuntimeTopology::MultiDbReady
+        };
+    }
+
+    let missing_users = legacy_users
+        .iter()
+        .filter(|user_id| !shared_users.contains(*user_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    if missing_users.is_empty() {
+        RuntimeTopology::MultiDbReady
+    } else {
+        RuntimeTopology::PendingLegacyMigration(PendingLegacyMultiDbMigration {
+            legacy_db_name,
+            shared_db_name,
+            legacy_users,
+            missing_users,
+        })
+    }
+}
+
 async fn discover_users(pool: &MySqlPool, db_name: &str) -> Result<Vec<String>, MemoriaError> {
     let rows = sqlx::query(
         "SELECT DISTINCT table_name FROM information_schema.columns \
@@ -597,6 +682,33 @@ async fn discover_users(pool: &MySqlPool, db_name: &str) -> Result<Vec<String>, 
         }
     }
     Ok(users.into_iter().collect())
+}
+
+async fn load_active_shared_registry_users_or_empty(
+    shared_db_url: &str,
+    shared_db_name: &str,
+) -> Result<BTreeSet<String>, MemoriaError> {
+    let shared_pool = match connect_pool(shared_db_url).await {
+        Ok(pool) => pool,
+        Err(MemoriaError::Database(msg))
+            if is_unknown_database_error_message(&msg, shared_db_name) =>
+        {
+            return Ok(BTreeSet::new());
+        }
+        Err(err) => return Err(err),
+    };
+
+    if !table_exists(&shared_pool, shared_db_name, "mem_user_registry").await? {
+        return Ok(BTreeSet::new());
+    }
+
+    let rows = sqlx::query("SELECT user_id FROM mem_user_registry WHERE status = 'active'")
+        .fetch_all(&shared_pool)
+        .await
+        .map_err(db_err)?;
+    rows.into_iter()
+        .map(|row| row.try_get("user_id").map_err(db_err))
+        .collect::<Result<BTreeSet<String>, MemoriaError>>()
 }
 
 async fn collect_active_snapshot_violations(
@@ -1150,13 +1262,23 @@ fn db_err(e: sqlx::Error) -> MemoriaError {
     MemoriaError::Database(e.to_string())
 }
 
+fn is_unknown_database_error_message(message: &str, db_name: &str) -> bool {
+    message.contains("1049")
+        && message.contains("Unknown database")
+        && (message.contains(db_name)
+            || message.contains(&format!("'{db_name}'"))
+            || message.contains(&format!("`{db_name}`")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        copyable_columns, pre_execute_account_snapshot_name, quote_ident,
-        sanitize_identifier_fragment, ColumnSpec, MAX_IDENTIFIER_LEN,
-        PRE_EXECUTE_ACCOUNT_SNAPSHOT_PREFIX, PRE_EXECUTE_ACCOUNT_SNAPSHOT_SUFFIX_LEN,
+        classify_runtime_topology, copyable_columns, pre_execute_account_snapshot_name,
+        quote_ident, sanitize_identifier_fragment, ColumnSpec, PendingLegacyMultiDbMigration,
+        RuntimeTopology, MAX_IDENTIFIER_LEN, PRE_EXECUTE_ACCOUNT_SNAPSHOT_PREFIX,
+        PRE_EXECUTE_ACCOUNT_SNAPSHOT_SUFFIX_LEN,
     };
+    use std::collections::BTreeSet;
 
     fn col(name: &str, nullable: bool, has_default: bool, auto_increment: bool) -> ColumnSpec {
         ColumnSpec {
@@ -1198,6 +1320,62 @@ mod tests {
     #[test]
     fn quote_ident_escapes_backticks() {
         assert_eq!(quote_ident("a`b"), "`a``b`");
+    }
+
+    #[test]
+    fn classify_runtime_topology_detects_fresh_single_db() {
+        let topology = classify_runtime_topology(
+            "memoria".to_string(),
+            "memoria_shared".to_string(),
+            vec![],
+            BTreeSet::new(),
+        );
+
+        assert_eq!(topology, RuntimeTopology::FreshSingleDb);
+    }
+
+    #[test]
+    fn classify_runtime_topology_detects_pending_migration() {
+        let topology = classify_runtime_topology(
+            "memoria".to_string(),
+            "memoria_shared".to_string(),
+            vec!["bob".to_string(), "alice".to_string()],
+            BTreeSet::from(["alice".to_string()]),
+        );
+
+        assert_eq!(
+            topology,
+            RuntimeTopology::PendingLegacyMigration(PendingLegacyMultiDbMigration {
+                legacy_db_name: "memoria".to_string(),
+                shared_db_name: "memoria_shared".to_string(),
+                legacy_users: vec!["alice".to_string(), "bob".to_string()],
+                missing_users: vec!["bob".to_string()],
+            })
+        );
+    }
+
+    #[test]
+    fn classify_runtime_topology_detects_multi_db_ready() {
+        let topology = classify_runtime_topology(
+            "memoria".to_string(),
+            "memoria_shared".to_string(),
+            vec!["bob".to_string(), "alice".to_string()],
+            BTreeSet::from(["alice".to_string(), "bob".to_string()]),
+        );
+
+        assert_eq!(topology, RuntimeTopology::MultiDbReady);
+    }
+
+    #[test]
+    fn classify_runtime_topology_detects_multi_db_ready_without_legacy_users() {
+        let topology = classify_runtime_topology(
+            "memoria".to_string(),
+            "memoria_shared".to_string(),
+            vec![],
+            BTreeSet::from(["alice".to_string()]),
+        );
+
+        assert_eq!(topology, RuntimeTopology::MultiDbReady);
     }
 
     #[test]
